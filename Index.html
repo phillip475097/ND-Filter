@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ND Filter Calculator</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; padding: 16px; min-height: 100vh; }
+.wrap { max-width: 420px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 700; color: #111; }
+.sub { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; margin-top: 2px; }
+.card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
+.toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+.toggle button { flex: 1; padding: 10px 6px; border-radius: 10px; cursor: pointer; border: 2px solid #d1d5db; background: #fff; color: #555; font-weight: 600; font-size: 13px; font-family: inherit; transition: all 0.15s; }
+.toggle button.on { border-color: #2563eb; background: #2563eb; color: #fff; }
+.row2 { display: flex; gap: 10px; margin-bottom: 12px; }
+.row2 .field { flex: 1; }
+.field label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.field select { width: 100%; padding: 10px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 16px; font-weight: 600; color: #111; background: #f9fafb; font-family: inherit; -webkit-appearance: none; appearance: none; }
+.field select:focus { outline: none; border-color: #2563eb; }
+.strip { display: flex; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
+.strip-lbl { font-size: 11px; color: #9ca3af; margin-bottom: 2px; }
+.strip-val { font-size: 20px; font-weight: 700; color: #111; }
+.result { text-align: center; padding: 24px 16px; }
+.result-eye { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+.result-big { font-size: 58px; font-weight: 800; line-height: 1; color: #2563eb; margin-bottom: 8px; }
+.result-big.none { font-size: 34px; color: #d1d5db; }
+.result-det { font-size: 13px; color: #9ca3af; }
+.grid-title { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.cell { padding: 8px 2px; border-radius: 8px; text-align: center; border: 1.5px solid #e5e7eb; background: #f9fafb; }
+.cell.on { border-color: #2563eb; background: #eff6ff; }
+.cell-n { font-size: 12px; font-weight: 700; color: #6b7280; }
+.cell.on .cell-n { color: #1d4ed8; }
+.cell-s { font-size: 10px; color: #d1d5db; margin-top: 1px; }
+.tip { font-size: 12px; color: #9ca3af; line-height: 1.7; padding: 12px 14px; background: #fff; border-radius: 10px; }
+.tip strong { color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ND Filter Calculator</h1>
+  <p class="sub">180° shutter rule · DJI drones</p>
+
+  <div class="toggle">
+    <button id="btn-neo" class="on" onclick="selectDrone('neo')">DJI Neo</button>
+    <button id="btn-mini" onclick="selectDrone('mini')">DJI Mini 4 Pro</button>
+  </div>
+
+  <div class="card">
+    <div class="row2">
+      <div class="field">
+        <label>Frame Rate</label>
+        <select id="fps" onchange="update()"></select>
+      </div>
+      <div class="field">
+        <label>ISO</label>
+        <select id="iso" onchange="update()"></select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Metered Shutter (no filter)</label>
+      <select id="shu" onchange="update()"></select>
+    </div>
+    <div class="strip">
+      <div>
+        <div class="strip-lbl">Target Shutter</div>
+        <div class="strip-val" id="tgt">—</div>
+      </div>
+      <div style="text-align:right">
+        <div class="strip-lbl">Stops Needed</div>
+        <div class="strip-val" id="sts">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card result">
+    <div class="result-eye">Recommended Filter</div>
+    <div class="result-big" id="rbig">—</div>
+    <div class="result-det" id="rdet"></div>
+  </div>
+
+  <div class="card">
+    <div class="grid-title">ND Filter Reference</div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="tip">
+    <strong>How to use:</strong> Remove all ND filters. Set your drone to auto-exposure and note the shutter speed it selects for correct exposure. Pick that shutter speed above and the calculator will tell you which ND filter to attach.
+  </div>
+</div>
+
+<script>
+var DRONES = {
+  neo:  { fps:[24,25,30,48,50,60],     iso:[100,200,400,800,1600,3200] },
+  mini: { fps:[24,25,30,48,50,60,120], iso:[100,200,400,800,1600,3200,6400] }
+};
+
+var SHUTTERS = [
+  "1/24","1/25","1/30","1/40","1/48","1/50","1/60","1/80","1/100","1/120",
+  "1/125","1/160","1/200","1/250","1/320","1/400","1/500","1/640","1/800",
+  "1/1000","1/1250","1/1600","1/2000","1/2500","1/3200","1/4000","1/5000",
+  "1/6400","1/8000"
+];
+
+var NDS = [
+  {n:"ND2",s:1},{n:"ND4",s:2},{n:"ND8",s:3},{n:"ND16",s:4},{n:"ND32",s:5},
+  {n:"ND64",s:6},{n:"ND128",s:7},{n:"ND256",s:8},{n:"ND400",s:8.6},{n:"ND1000",s:10}
+];
+
+var currentDrone = "neo";
+
+function toSec(str) {
+  var p = str.split("/");
+  return p.length === 2 ? parseInt(p[0]) / parseInt(p[1]) : parseFloat(str);
+}
+
+function setOptions(id, options) {
+  var el = document.getElementById(id);
+  el.innerHTML = "";
+  for (var i = 0; i < options.length; i++) {
+    var opt = document.createElement("option");
+    opt.value = options[i].v;
+    opt.textContent = options[i].t;
+    el.appendChild(opt);
+  }
+}
+
+function selectDrone(d) {
+  currentDrone = d;
+  document.getElementById("btn-neo").className  = d === "neo"  ? "on" : "";
+  document.getElementById("btn-mini").className = d === "mini" ? "on" : "";
+  var data = DRONES[d];
+  setOptions("fps", data.fps.map(function(v){ return {v:v, t:v+" fps"}; }));
+  setOptions("iso", data.iso.map(function(v){ return {v:v, t:"ISO "+v}; }));
+  setOptions("shu", SHUTTERS.map(function(v){ return {v:v, t:v}; }));
+  document.getElementById("shu").value = "1/1000";
+  update();
+}
+
+function buildGrid(recName) {
+  var g = document.getElementById("grid");
+  g.innerHTML = "";
+  for (var i = 0; i < NDS.length; i++) {
+    var f = NDS[i];
+    var div = document.createElement("div");
+    div.className = "cell" + (f.n === recName ? " on" : "");
+    div.innerHTML = '<div class="cell-n">'+f.n+'</div><div class="cell-s">'+f.s+' stops</div>';
+    g.appendChild(div);
+  }
+}
+
+function update() {
+  var fps    = parseInt(document.getElementById("fps").value);
+  var iso    = parseInt(document.getElementById("iso").value);
+  var shutSt = document.getElementById("shu").value;
+
+  var target  = 1 / (2 * fps);
+  var current = toSec(shutSt);
+  var tgtLbl  = "1/" + Math.round(1 / target);
+  var stops   = Math.log2(target / current);
+  var needs   = stops > 0.05;
+
+  document.getElementById("tgt").textContent = tgtLbl;
+  document.getElementById("sts").textContent = needs ? stops.toFixed(1) + " stops" : "None";
+
+  var bigEl = document.getElementById("rbig");
+  var detEl = document.getElementById("rdet");
+
+  if (!needs) {
+    bigEl.className = "result-big none";
+    bigEl.textContent = "NONE";
+    detEl.textContent = "Shutter is already at target (" + tgtLbl + ")";
+    buildGrid(null);
+    return;
+  }
+
+  var best = NDS[0];
+  var minD = 999;
+  for (var i = 0; i < NDS.length; i++) {
+    var d = Math.abs(NDS[i].s - stops);
+    if (d < minD) { minD = d; best = NDS[i]; }
+  }
+
+  bigEl.className = "result-big";
+  bigEl.textContent = best.n;
+  detEl.textContent = best.s + " stop" + (best.s !== 1 ? "s" : "") + " reduction · " + fps + "fps · ISO " + iso;
+  buildGrid(best.n);
+}
+
+// Initialise
+selectDrone("neo");
+</script>
+</body>
+</html>
